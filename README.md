@@ -6,11 +6,11 @@ This repository contains codes, data and trained models for RNADegpre. RNADegpre
 
 First, download the repository and create the environment.
 
-  git clone https://github.com/ShenggengLin/RNADegpre.git
-  cd ./RNADegpre
-  conda create -n RNADegpre_env
-  conda activate RNADegpre_env
-  conda install -r requirements.txt
+'''git clone https://github.com/ShenggengLin/RNADegpre.git
+cd ./RNADegpre
+conda create -n RNADegpre_env
+conda activate RNADegpre_env
+conda install -r requirements.txt'''
 
 # Configure RNA-FM, DNABERT Pre-training Model
 
