@@ -21,25 +21,25 @@ Download the RNA-FM model from https://github.com/ml4bio/RNA-FM and configure it
 Download the DNABERT model weights from https://drive.google.com/drive/folders/1nzlKD29vTcI_3bNPcfjEHT4jYCaW_Ae6?usp=sharing and put it in the scripts/DNABERT6 directory.
 
 # Model Train
-
-  cd ./RNADegpre/scripts
-  conda activate RNADegpre_env
-  python RNADegpre_train.py
-
+```
+cd ./RNADegpre/scripts
+conda activate RNADegpre_env
+python RNADegpre_train.py
+```
 In the code file, you can modify the model's hyperparameters and training data.
 
 # Model Test
-
-  cd ./RNADegpre/scripts
-  conda activate RNADegpre_env
-  python best_mse_analysis.py
-
+```
+cd ./RNADegpre/scripts
+conda activate RNADegpre_env
+python best_mse_analysis.py
+```
 In the code file, you can modify the RNA data to be predicted. If there are multiple RNAs, the code will sort the RNAs from small to large according to the value of MCRMSE and output them.
 
 # RNA-seq Optimization
-
-  cd ./RNADegpre/scripts
-  conda activate RNADegpre_env
-  python RNADegpre_RNAopt.py
-
+```
+cd ./RNADegpre/scripts
+conda activate RNADegpre_env
+python RNADegpre_RNAopt.py
+```
 In the code file, you can modify the RNA sequence to be optimized and its name. The code will output the three most easily degraded codons and the RNA sequence after saturation mutation of these three codons.
