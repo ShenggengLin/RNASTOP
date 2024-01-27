@@ -1,0 +1,22 @@
+# paths to local installations of packages.  If package is not installed, leave as None
+# Replace paths below with paths to your installations.
+# NB: .gitignore file ignores *.arnie files. Name it as such if you don't want your local path file 
+# included with your git repo.
+
+#rnastructure: /path/to/RNAstructure/exe
+#rnasoft: /path/to/MultiRNAFold
+#contrafold_2: /path/to/contrafold-se/src
+#eternafold: /path/to/eternafold/src/
+
+# for a Mac installed binary:
+vienna_2: /usr/local/bin
+#rnastructure: /usr/local/bin
+#eternafold: /usr/local/bin
+
+# for path to a vienna build:
+#vienna_2: /path/to/ViennaRNA-2.4.10/src/bin
+#vienna_1: /path/to/ViennaRNA-1.8.5/bin
+#nupack: /path/to/nupack3.2.2/build/bin
+
+#TMP: location for tmp files for packages. Update to where you want your tmp files stored.
+TMP: /tmp
