@@ -38,8 +38,14 @@ In the code file, you can modify the RNA data to be predicted. If there are mult
 
 ## RNA-seq Optimization
 ```
+#beam search
 cd ./RNADegpre/scripts
 conda activate RNADegpre_env
-python RNADegpre_RNAopt.py
+python beam_rnaopt_covid19.py
+
+#MCTS
+cd ./RNADegpre/scripts
+conda activate RNADegpre_env
+python MCTS_rnaopt_covid19.py
 ```
-In the code file, you can modify the RNA sequence to be optimized and its name. The code will output the three most easily degraded codons and the RNA sequence after saturation mutation of these three codons.
+In the code file, you can modify the RNA sequence to be optimized. The code will output the optimization process and the optimized sequence.
