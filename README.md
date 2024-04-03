@@ -1,7 +1,7 @@
 # RNADegpre
 
 This repository contains codes, data and trained models for RNADegpre. RNADegpre is a deep learning model based on large language models to predict mRNA degradation at the nucleotide resolution.You can find more details about RNADegpre in our paper, "Accurate prediction of RNA degradation at single-nucleotide resolution with large language models" (Lin et al., 2024).
-![image](https://github.com/ShenggengLin/RNADegpre/blob/main/pictures/Model_architecture.png)
+![image](https://github.com/ShenggengLin/RNADegpre/blob/main/pictures/Model_Architecture_and_Sequence_Optimization.tif)
 ## Create Environment with Conda
 
 First, download the repository and create the environment.
