@@ -34,7 +34,7 @@ cd ./RNADegpre/scripts
 conda activate RNADegpre_env
 python best_mse_analysis.py
 ```
-In the code file, you can modify the RNA data to be predicted. If there are multiple RNAs, the code will sort the RNAs from small to large according to the value of MCRMSE and output them.
+In the code file, you can modify the RNA data to be predicted. If there are multiple RNAs, the code will sort the RNAs from small to large according to the value of MCRMSE and output them. And there are detailed comments for each function in the code file.
 
 ## RNA-seq Optimization
 ```
@@ -48,4 +48,4 @@ cd ./RNADegpre/scripts
 conda activate RNADegpre_env
 python MCTS_rnaopt_covid19.py
 ```
-In the code file, you can modify the RNA sequence to be optimized. The code will output the optimization process and the optimized sequence.
+In the code file, you can modify the RNA sequence to be optimized. The code will output the optimization process and the optimized sequence. And there are detailed comments for each function in the code file.
