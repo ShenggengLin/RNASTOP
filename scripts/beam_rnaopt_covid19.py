@@ -1,4 +1,4 @@
-#dna pretrain
+# Import the required libraries
 import os
 import torch
 import torch.nn as nn
@@ -13,12 +13,13 @@ from torchsummary import summary
 from torchcrf import CRF
 from numpy import random
 import copy
-
 from arnie.pfunc import pfunc
 from arnie.free_energy import free_energy
 from arnie.bpps import bpps
 from arnie.mfe import mfe
 import arnie.utils as utils
+
+#Fixed random seeds to ensure reproducibility of the results
 seed = 4
 beam_sear_geshu=10
 random.seed(seed)
@@ -28,6 +29,8 @@ torch.manual_seed(seed)
 torch.cuda.manual_seed(seed)
 torch.cuda.manual_seed_all(seed)
 torch.backends.cudnn.deterministic = True
+
+#The hyperparameters of the model can be modified here
 os.environ['CUDA_VISIBLE_DEVICES']='1'
 learning_rate=4.0e-4
 Batch_size=64
@@ -35,18 +38,23 @@ Conv_kernel=7
 dropout=0.3
 embedding_dim=128
 num_encoder_layers=4
-
+patience=50
+error_alpha=0.5
+error_beta=5
+epochs=1000
+nhead=4
+nStrDim=4
+Use_pretrain_model=True
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("device:",device)
-import fm
+
 # Load RNA-FM model
+import fm
 fm_pretrain_model, fm_pretrain_alphabet = fm.pretrained.rna_fm_t12()
 fm_pretrain_batch_converter = fm_pretrain_alphabet.get_batch_converter()
 fm_pretrain_model=fm_pretrain_model.to(device)
 
-
-
-
+#The mRNA sequences are clustered, and each mRNA is assigned a weight according to the clustering results
 def sample_weight(text_lists,thred=20):
     clusters=[]
     for text in text_lists:
@@ -61,7 +69,6 @@ def sample_weight(text_lists,thred=20):
                 break
         if not flag:
             clusters.append({text})
-
     #valid_clusters=[i for i in clusters if len(i)>50]
     print('total cluster:{}'.format(len(clusters)))
 
@@ -79,42 +86,23 @@ def sample_weight(text_lists,thred=20):
 
     return sam_wei
 
-
-
-
-
+#Definition the word list
 tokens = 'ACGU().BEHIMSXDF'   #D start,F end
 vocab_size=len(tokens)
 
-
-
-
-
-patience=50
-error_alpha=0.5
-error_beta=5
-epochs=1000
-nhead=4
-nStrDim=4
-Use_pretrain_model=True
-
+# Definition the RNADataset
 class RNADataset(Dataset):
     def __init__(self,seqs,seqsOri, As,train_sam_wei=None,train_error_weights=None,sam_aug_flag=None):
         if Use_pretrain_model:
             self.seqs=seqsOri
         else:
             self.seqs=seqs
-
-        
-        
-        
         self.As=As
         self.train_sam_wei = train_sam_wei
         self.train_error_weights=train_error_weights
         self.sam_aug_flag=sam_aug_flag
         self.length=len(seqs)
         
-
     def __getitem__(self,idx):
         if (self.train_sam_wei is not None) and (self.train_error_weights is not None) and (self.sam_aug_flag is not None):
             return self.seqs[idx],self.As[idx], self.train_sam_wei[idx],self.train_error_weights[idx],self.sam_aug_flag[idx]
@@ -124,19 +112,16 @@ class RNADataset(Dataset):
     def __len__(self):
         return self.length
 
+#Get the embedding of the mrna sequences
 def preprocess_inputs(np_seq):
-
     re_seq=[]
     for i in range(len(np_seq)):
-
         re_seq.append([tokens.index(s) for s in np_seq[i]])
-
     re_seq=np.array(re_seq)
-
 
     return re_seq
 
-
+#Get the adjacency matrix of the mrna
 def get_structure_adj(data_seq_length,data_structure,data_sequence):
     Ss = []
     for i in (range(len(data_sequence))):
@@ -163,13 +148,7 @@ def get_structure_adj(data_seq_length,data_structure,data_sequence):
                 a_structures[(sequence[i], sequence[start])][i, start] = 1
 
         a_strc = np.stack([a for a in a_structures.values()], axis=2)
-
-
         a_strc = np.sum(a_strc, axis=2, keepdims=True)
-
-
-
-
         Ss.append(a_strc)
 
     Ss = np.array(Ss,dtype='float32')
@@ -179,9 +158,7 @@ def get_structure_adj(data_seq_length,data_structure,data_sequence):
 
     return Ss
 
-
-    
-
+# Define the RNADegpre model
 class Model(nn.Module):
     def __init__(self,vocab_size,embedding_dim,pred_dim,dropout,nhead,num_encoder_layers):
         super().__init__()
@@ -230,10 +207,6 @@ class Model(nn.Module):
                                             nn.Dropout(dropout),
                                             )
         
-        
-
-        
-
         encoder_layer_str = nn.TransformerEncoderLayer(d_model=embedding_dim, nhead=nhead, dropout=dropout,batch_first=True)
         self.transformer_encoder_str = nn.TransformerEncoder(encoder_layer_str, num_layers=num_encoder_layers)
         self.conv_encoder_str = nn.Sequential(nn.Conv1d(embedding_dim, embedding_dim, Conv_kernel),
@@ -253,25 +226,16 @@ class Model(nn.Module):
                                             nn.BatchNorm1d(num_features=embedding_dim*2),
                                             nn.ReLU(inplace=True),
                                             nn.Dropout(dropout),
-
-                                            
-
                                             nn.ConvTranspose1d(embedding_dim*2, embedding_dim, Conv_kernel),
                                             nn.BatchNorm1d(num_features=embedding_dim),
                                             nn.ReLU(inplace=True),
                                             nn.Dropout(dropout),
                                             )
 
-
-
-
         self.conv_encoder_finfus = nn.Sequential(nn.Conv1d(embedding_dim*2, embedding_dim*4, Conv_kernel),
                                             nn.BatchNorm1d(num_features=embedding_dim*4),
                                             nn.ReLU(inplace=True),
                                             nn.Dropout(dropout),
-
-                                            
-
                                             nn.ConvTranspose1d(embedding_dim*4, embedding_dim*2, Conv_kernel),
                                             nn.BatchNorm1d(num_features=embedding_dim*2),
                                             nn.ReLU(inplace=True),
@@ -283,36 +247,25 @@ class Model(nn.Module):
                                nn.Dropout(dropout),
                                nn.Linear(embedding_dim , pred_dim)
                                        )
-        
-        
-        
-
     def forward(self,As,seq=None,fm_seq=None,dnapt2_seq=None):
         #As shape [64, 107, 107, 8]
 
         if not Use_pretrain_model:
             embeddedSeq=self.embeddingSeq(seq)
             
-            
         else:
             embeddedSeq_fm=self.embeddingSeq_fm(fm_seq)
             
-            
-            
-
-        
             #embeddedLoop = self.embeddingloop(loop)
         
             As=self.embeddingstr(As.permute(0,3, 1, 2) ).permute(0, 2, 3, 1)  #[64, 107, 1, 128]
             As = torch.squeeze(As)  #[64, 107, 128]
             As = torch.unsqueeze(As,0)
             
-        
             embeddedSeq_fm_share=self.transformer_encoder_share(embeddedSeq_fm)
             embedded_seq_fm1=self.transformer_encoder_seq_fm(embeddedSeq_fm_share)
             embedded_seq_fm2 = self.conv_encoder_seq_fm(embeddedSeq_fm_share.permute(0,2,1)).permute(0,2,1)
 
-           
             '''embeddedLoop= self.transformer_encoder_share(embeddedLoop)
             embedded_loop1 = self.transformer_encoder_loop(embeddedLoop)
             embedded_loop2 = self.conv_encoder_loop(embeddedLoop.permute(0,2,1)).permute(0,2,1)'''
@@ -333,25 +286,17 @@ class Model(nn.Module):
             embedded_cat=self.conv_encoder_finfus(embedded_cat.permute(0,2,1)).permute(0,2,1)
             pre_out=self.pre(embedded_cat)
 
-            
-
-            
             return pre_out
 
-
+# Define different data types
 pred_cols_train = ['reactivity', 'deg_Mg_pH10', 'deg_Mg_50C', 'deg_pH10', 'deg_50C']
 pred_cols_test = ['reactivity', 'deg_Mg_pH10', 'deg_Mg_50C']
 
+# In the process of training the model, different weights are assigned to different data types
 LOSS_WGTS = [0.3, 0.3, 0.3, 0.05, 0.05]
 pred_cols_errors=['reactivity_error', 'deg_error_Mg_pH10', 'deg_error_Mg_50C','deg_error_pH10','deg_error_50C']
 
-
-    
-
-
-
-
-
+#get the 1-dimensional and 2-dimensional distance matrix of mRNA
 def get_distance_matrix(As):
     idx = np.arange(As.shape[1])
     Ds = []
@@ -369,7 +314,6 @@ def get_distance_matrix(As):
         Dss.append(Ds ** i)
     Ds = np.stack(Dss, axis=3)
     return Ds
-
 def calc_neighbor(d, dim, n):
     lst_x,lst_y = np.where(d==n)
     for c, x in enumerate(lst_x):
@@ -406,6 +350,7 @@ def get_distance_matrix_2d(Ss):
     Ds = np.stack(Dss, axis=3)
     return Ds[:, :, :, :, 0]
 
+#The codons are sorted according to their degradability, and the degradability value and the location of the codon are returned
 def max_deg_pro(pre_list,geshu):
     val=[]
     for i in range(len(pre_list)//3):
@@ -416,48 +361,22 @@ def max_deg_pro(pre_list,geshu):
     vale=[]
     for i in range(len(sorted_id)):
         vale.append(val[sorted_id[i]])
-
     return vale,sorted_id
 
+#Returns the most easily degraded codon
 def max_deg_mimazi(seq,sort_id):
     mimazi=[]
     for i in range(len(sort_id)):
         mimazi.append(seq[sort_id[i]*3]+seq[sort_id[i]*3+1]+seq[sort_id[i]*3+2])
     return mimazi
 
+#Define the codon table
 mimazi_table=[{'GCU','GCC','GCA','GCG'},{'CGU','CGC','CGA','CGG','AGA','AGG'},{'AAU','AAC'},{'GAU','GAC'},{'UGU','UGC'},
               {'CAA','CAG'},{'GAA','GAG'},{'GGU','GGC','GGA','GGG'},{'CAU','CAC'},{'AUU','AUC','AUA'},
               {'UUA','UUG','CUU','CUC','CUA','CUG'},{'AAA','AAG'},{'AUG'},{'UUU','UUC'},{'CCU','CCC','CCA','CCG'},
               {'UCU','UCC','UCA','UCG','AGU','AGC'},{'ACU','ACC','ACA','ACG'},{'UGG'},{'UAU','UAC'},{'GUU','GUC','GUA','GUG'}]
-'''
-def seq_opti(seq,sorted_id):
-    
-    seq_now=list(seq)
-    mimazi=max_deg_mimazi(seq,sorted_id)
-    mimazi_opt=[]
-    for i in range(len(mimazi)):
-        now_mimazi=mimazi[i]
-        for j in range(len(mimazi_table)):
-            if now_mimazi in mimazi_table[j]:
-                if mimazi_table[j]==1:
-                    mimazi_opt.append(now_mimazi)
-                    break
-                else:
-                    random_mimazi=random.choice(list(mimazi_table[j]-{now_mimazi}))
-                    mimazi_opt.append(random_mimazi)
-                    break
-    
-    for i in range(len(mimazi_opt)):
-        seq_now[sorted_id[i]]=mimazi_opt[i][0]
-        seq_now[sorted_id[i]+1]=mimazi_opt[i][1]
-        seq_now[sorted_id[i]+2]=mimazi_opt[i][2]
-    seq_now=''.join(seq_now)
-    
-    print(mimazi)
-    print(mimazi_opt)
-    return seq_now
-'''
 
+#Returns the sequences after the codon mutation and the corresponding MFE values
 def seq_opti(seq_ori,sorted_id,seq_ori_mfe):
     #sorted_id [91, 81, 145]
 
@@ -496,8 +415,6 @@ def seq_opti(seq_ori,sorted_id,seq_ori_mfe):
             seq_after_tubian.append(seq_ori)
             seq_after_tubian_mfe.append(seq_ori_mfe)
     
-    
-
     sorted_mfe = sorted(range(len(seq_after_tubian_mfe)), key=lambda k: seq_after_tubian_mfe[k])
     sorted_mfe=sorted_mfe[:beam_sear_geshu]
     final_seq=[]
@@ -508,6 +425,7 @@ def seq_opti(seq_ori,sorted_id,seq_ori_mfe):
     
     return final_seq,final_score
 
+#Optimize single mRNA sequences using beam search
 def beam_search_single(seq_ori,len_seq_fenge,seq_ori_mfe):
     
     seq_ori_len=len(seq_ori)
@@ -564,7 +482,7 @@ def beam_search_single(seq_ori,len_seq_fenge,seq_ori_mfe):
     return final_seq,final_score
     
     
-
+#Optimize multiple mRNA sequences using beam search
 def beam_search_multi(seq_list,score_list):
     seq_multi=[]
     score_multi=[]
@@ -585,19 +503,23 @@ def beam_search_multi(seq_list,score_list):
     
 
 
-#seq_ori_COVID19_BNT=["AUGGGGACAGUUAAUAAACCAUCGGGGUUCAAAUCGGGCGGA"]
+#Original sequence to be optimized
 seq_ori_COVID19_BNT=["AUGUUCGUGUUCCUGGUGCUGCUGCCUCUGGUGUCCAGCCAGUGUGUGAACCUGACCACCAGAACACAGCUGCCUCCAGCCUACACCAACAGCUUUACCAGAGGCGUGUACUACCCCGACAAGGUGUUCAGAUCCAGCGUGCUGCACUCUACCCAGGACCUGUUCCUGCCUUUCUUCAGCAACGUGACCUGGUUCCACGCCAUCCACGUGUCCGGCACCAAUGGCACCAAGAGAUUCGACAACCCCGUGCUGCCCUUCAACGACGGGGUGUACUUUGCCAGCACCGAGAAGUCCAACAUCAUCAGAGGCUGGAUCUUCGGCACCACACUGGACAGCAAGACCCAGAGCCUGCUGAUCGUGAACAACGCCACCAACGUGGUCAUCAAAGUGUGCGAGUUCCAGUUCUGCAACGACCCCUUCCUGGGCGUCUACUACCACAAGAACAACAAGAGCUGGAUGGAAAGCGAGUUCCGGGUGUACAGCAGCGCCAACAACUGCACCUUCGAGUACGUGUCCCAGCCUUUCCUGAUGGACCUGGAAGGCAAGCAGGGCAACUUCAAGAACCUGCGCGAGUUCGUGUUUAAGAACAUCGACGGCUACUUCAAGAUCUACAGCAAGCACACCCCUAUCAACCUCGUGCGGGAUCUGCCUCAGGGCUUCUCUGCUCUGGAACCCCUGGUGGAUCUGCCCAUCGGCAUCAACAUCACCCGGUUUCAGACACUGCUGGCCCUGCACAGAAGCUACCUGACACCUGGCGAUAGCAGCAGCGGAUGGACAGCUGGUGCCGCCGCUUACUAUGUGGGCUACCUGCAGCCUAGAACCUUCCUGCUGAAGUACAACGAGAACGGCACCAUCACCGACGCCGUGGAUUGUGCUCUGGAUCCUCUGAGCGAGACAAAGUGCACCCUGAAGUCCUUCACCGUGGAAAAGGGCAUCUACCAGACCAGCAACUUCCGGGUGCAGCCCACCGAAUCCAUCGUGCGGUUCCCCAAUAUCACCAAUCUGUGCCCCUUCGGCGAGGUGUUCAAUGCCACCAGAUUCGCCUCUGUGUACGCCUGGAACCGGAAGCGGAUCAGCAAUUGCGUGGCCGACUACUCCGUGCUGUACAACUCCGCCAGCUUCAGCACCUUCAAGUGCUACGGCGUGUCCCCUACCAAGCUGAACGACCUGUGCUUCACAAACGUGUACGCCGACAGCUUCGUGAUCCGGGGAGAUGAAGUGCGGCAGAUUGCCCCUGGACAGACAGGCAAGAUCGCCGACUACAACUACAAGCUGCCCGACGACUUCACCGGCUGUGUGAUUGCCUGGAACAGCAACAACCUGGACUCCAAAGUCGGCGGCAACUACAAUUACCUGUACCGGCUGUUCCGGAAGUCCAAUCUGAAGCCCUUCGAGCGGGACAUCUCCACCGAGAUCUAUCAGGCCGGCAGCACCCCUUGUAACGGCGUGGAAGGCUUCAACUGCUACUUCCCACUGCAGUCCUACGGCUUUCAGCCCACAAAUGGCGUGGGCUAUCAGCCCUACAGAGUGGUGGUGCUGAGCUUCGAACUGCUGCAUGCCCCUGCCACAGUGUGCGGCCCUAAGAAAAGCACCAAUCUCGUGAAGAACAAAUGCGUGAACUUCAACUUCAACGGCCUGACCGGCACCGGCGUGCUGACAGAGAGCAACAAGAAGUUCCUGCCAUUCCAGCAGUUUGGCCGGGAUAUCGCCGAUACCACAGACGCCGUUAGAGAUCCCCAGACACUGGAAAUCCUGGACAUCACCCCUUGCAGCUUCGGCGGAGUGUCUGUGAUCACCCCUGGCACCAACACCAGCAAUCAGGUGGCAGUGCUGUACCAGGACGUGAACUGUACCGAAGUGCCCGUGGCCAUUCACGCCGAUCAGCUGACACCUACAUGGCGGGUGUACUCCACCGGCAGCAAUGUGUUUCAGACCAGAGCCGGCUGUCUGAUCGGAGCCGAGCACGUGAACAAUAGCUACGAGUGCGACAUCCCCAUCGGCGCUGGAAUCUGCGCCAGCUACCAGACACAGACAAACAGCCCUCGGAGAGCCAGAAGCGUGGCCAGCCAGAGCAUCAUUGCCUACACAAUGUCUCUGGGCGCCGAGAACAGCGUGGCCUACUCCAACAACUCUAUCGCUAUCCCCACCAACUUCACCAUCAGCGUGACCACAGAGAUCCUGCCUGUGUCCAUGACCAAGACCAGCGUGGACUGCACCAUGUACAUCUGCGGCGAUUCCACCGAGUGCUCCAACCUGCUGCUGCAGUACGGCAGCUUCUGCACCCAGCUGAAUAGAGCCCUGACAGGGAUCGCCGUGGAACAGGACAAGAACACCCAAGAGGUGUUCGCCCAAGUGAAGCAGAUCUACAAGACCCCUCCUAUCAAGGACUUCGGCGGCUUCAAUUUCAGCCAGAUUCUGCCCGAUCCUAGCAAGCCCAGCAAGCGGAGCUUCAUCGAGGACCUGCUGUUCAACAAAGUGACACUGGCCGACGCCGGCUUCAUCAAGCAGUAUGGCGAUUGUCUGGGCGACAUUGCCGCCAGGGAUCUGAUUUGCGCCCAGAAGUUUAACGGACUGACAGUGCUGCCUCCUCUGCUGACCGAUGAGAUGAUCGCCCAGUACACAUCUGCCCUGCUGGCCGGCACAAUCACAAGCGGCUGGACAUUUGGAGCAGGCGCCGCUCUGCAGAUCCCCUUUGCUAUGCAGAUGGCCUACCGGUUCAACGGCAUCGGAGUGACCCAGAAUGUGCUGUACGAGAACCAGAAGCUGAUCGCCAACCAGUUCAACAGCGCCAUCGGCAAGAUCCAGGACAGCCUGAGCAGCACAGCAAGCGCCCUGGGAAAGCUGCAGGACGUGGUCAACCAGAAUGCCCAGGCACUGAACACCCUGGUCAAGCAGCUGUCCUCCAACUUCGGCGCCAUCAGCUCUGUGCUGAACGAUAUCCUGAGCAGACUGGACaaagUgGAGGCCGAGGUGCAGAUCGACAGACUGAUCACAGGCAGACUGCAGAGCCUCCAGACAUACGUGACCCAGCAGCUGAUCAGAGCCGCCGAGAUUAGAGCCUCUGCCAAUCUGGCCGCCACCAAGAUGUCUGAGUGUGUGCUGGGCCAGAGCAAGAGAGUGGACUUUUGCGGCAAGGGCUACCACCUGAUGAGCUUCCCUCAGUCUGCCCCUCACGGCGUGGUGUUUCUGCACGUGACAUAUGUGCCCGCUCAAGAGAAGAAUUUCACCACCGCUCCAGCCAUCUGCCACGACGGCAAAGCCCACUUUCCUAGAGAAGGCGUGUUCGUGUCCAACGGCACCCAUUGGUUCGUGACACAGCGGAACUUCUACGAGCCCCAGAUCAUCACCACCGACAACACCUUCGUGUCUGGCAACUGCGACGUCGUGAUCGGCAUUGUGAACAAUACCGUGUACGACCCUCUGCAGCCCGAGCUGGACAGCUUCAAAGAGGAACUGGACAAGUACUUUAAGAACCACACAAGCCCCGACGUGGACCUGGGCGAUAUCAGCGGAAUCAAUGCCAGCGUCGUGAACAUCCAGAAAGAGAUCGACCGGCUGAACGAGGUGGCCAAGAAUCUGAACGAGAGCCUGAUCGACCUGCAAGAACUGGGGAAGUACGAGCAGUACAUCAAGUGGCCCUGGUACAUCUGGCUGGGCUUUAUCGCCGGACUGAUUGCCAUCGUGAUGGUCACAAUCAUGCUGUGUUGCAUGACCAGCUGCUGUAGCUGCCUGAAGGGCUGUUGUAGCUGUGGCAGCUGCUGCAAGUUCGACGAGGACGAUUCUGAGCCCGUGCUGAAGGGCGUGAAACUGCACUACACA"]
 seq_ori_COVID19_BNT[0]=seq_ori_COVID19_BNT[0].upper()
 
+#Calculate the MFE value of original sequence
 best_mfe=free_energy(seq_ori_COVID19_BNT[0], package='vienna_2')
 best_seq=seq_ori_COVID19_BNT[0]
 print('seq_ori_mfe:')
 print(best_mfe)
 score_ori_list=[best_mfe]
 
+#Perform one round of optimization on the original sequence using beam search
 final_seq_multi,final_score_multi=beam_search_multi(seq_ori_COVID19_BNT,score_ori_list)
 seq_lujing=[]
 score_lujing=[]
+
+#Iterative optimization of the original sequence using beam search
 while min(final_score_multi) <best_mfe:
     
     seq_lujing.append(final_seq_multi)
