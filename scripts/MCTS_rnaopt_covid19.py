@@ -1,3 +1,4 @@
+# Import the required libraries
 import random
 import numpy as np
 from arnie.free_energy import free_energy
@@ -17,6 +18,7 @@ from torchcrf import CRF
 from numpy import random
 import copy
 
+#Fixed random seeds to ensure reproducibility of the results
 seed = 4
 random.seed(seed)
 os.environ['PYTHONHASHSEED'] = str(seed)
@@ -26,6 +28,7 @@ torch.cuda.manual_seed(seed)
 torch.cuda.manual_seed_all(seed)
 torch.backends.cudnn.deterministic = True
 
+#The hyperparameters of the model can be modified here
 os.environ['CUDA_VISIBLE_DEVICES']='1'
 learning_rate=4.0e-4
 Batch_size=64
@@ -33,19 +36,25 @@ Conv_kernel=7
 dropout=0.3
 embedding_dim=128
 num_encoder_layers=4
-
-
 k_mimazi=10
 num_iter_MCTS=50
-
+patience=50
+error_alpha=0.5
+error_beta=5
+epochs=1000
+nhead=4
+nStrDim=4
+Use_pretrain_model=True
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("device:",device)
-import fm
+
 # Load RNA-FM model
+import fm
 fm_pretrain_model, fm_pretrain_alphabet = fm.pretrained.rna_fm_t12()
 fm_pretrain_batch_converter = fm_pretrain_alphabet.get_batch_converter()
 fm_pretrain_model=fm_pretrain_model.to(device)
 
+#The mRNA sequences are clustered, and each mRNA is assigned a weight according to the clustering results
 def sample_weight(text_lists,thred=20):
     clusters=[]
     for text in text_lists:
@@ -78,25 +87,11 @@ def sample_weight(text_lists,thred=20):
 
     return sam_wei
 
-
-
-
-
+#Definition the word list
 tokens = 'ACGU().BEHIMSXDF'   #D start,F end
 vocab_size=len(tokens)
 
-
-
-
-
-patience=50
-error_alpha=0.5
-error_beta=5
-epochs=1000
-nhead=4
-nStrDim=4
-Use_pretrain_model=True
-
+# Definition the RNADataset
 class RNADataset(Dataset):
     def __init__(self,seqs,seqsOri, As,train_sam_wei=None,train_error_weights=None,sam_aug_flag=None):
         if Use_pretrain_model:
@@ -104,9 +99,7 @@ class RNADataset(Dataset):
         else:
             self.seqs=seqs
 
-        
-        
-        
+
         self.As=As
         self.train_sam_wei = train_sam_wei
         self.train_error_weights=train_error_weights
@@ -123,6 +116,7 @@ class RNADataset(Dataset):
     def __len__(self):
         return self.length
 
+#Get the embedding of the mrna sequences
 def preprocess_inputs(np_seq):
 
     re_seq=[]
@@ -135,7 +129,7 @@ def preprocess_inputs(np_seq):
 
     return re_seq
 
-
+#Get the adjacency matrix of the mrna
 def get_structure_adj(data_seq_length,data_structure,data_sequence):
     Ss = []
     for i in (range(len(data_sequence))):
@@ -166,9 +160,6 @@ def get_structure_adj(data_seq_length,data_structure,data_sequence):
 
         a_strc = np.sum(a_strc, axis=2, keepdims=True)
 
-
-
-
         Ss.append(a_strc)
 
     Ss = np.array(Ss,dtype='float32')
@@ -178,9 +169,7 @@ def get_structure_adj(data_seq_length,data_structure,data_sequence):
 
     return Ss
 
-
-    
-
+# Define the RNADegpre model
 class Model(nn.Module):
     def __init__(self,vocab_size,embedding_dim,pred_dim,dropout,nhead,num_encoder_layers):
         super().__init__()
@@ -337,20 +326,16 @@ class Model(nn.Module):
             
             return pre_out
 
-
+# Define different data types
 pred_cols_train = ['reactivity', 'deg_Mg_pH10', 'deg_Mg_50C', 'deg_pH10', 'deg_50C']
 pred_cols_test = ['reactivity', 'deg_Mg_pH10', 'deg_Mg_50C']
 
+# In the process of training the model, different weights are assigned to different data types
 LOSS_WGTS = [0.3, 0.3, 0.3, 0.05, 0.05]
 pred_cols_errors=['reactivity_error', 'deg_error_Mg_pH10', 'deg_error_Mg_50C','deg_error_pH10','deg_error_50C']
 
 
-    
-
-
-
-
-
+#get the 1-dimensional and 2-dimensional distance matrix of mRNA
 def get_distance_matrix(As):
     idx = np.arange(As.shape[1])
     Ds = []
@@ -368,7 +353,6 @@ def get_distance_matrix(As):
         Dss.append(Ds ** i)
     Ds = np.stack(Dss, axis=3)
     return Ds
-
 def calc_neighbor(d, dim, n):
     lst_x,lst_y = np.where(d==n)
     for c, x in enumerate(lst_x):
@@ -405,6 +389,7 @@ def get_distance_matrix_2d(Ss):
     Ds = np.stack(Dss, axis=3)
     return Ds[:, :, :, :, 0]
 
+#Define Monte Carlo tree nodes
 class MCTSNode:
     """
     Represents a node in the Monte Carlo Tree Search.
@@ -434,17 +419,22 @@ def select_best_child(node, exploration_weight=2):
             best_nodes = [child]
         elif ucb1 == best_value:
             best_nodes.append(child)
-    return random.choice(best_nodes)  
+    return random.choice(best_nodes)
+
+#Define the codon table
 mimazi_table=[{'GCU','GCC','GCA','GCG'},{'CGU','CGC','CGA','CGG','AGA','AGG'},{'AAU','AAC'},{'GAU','GAC'},{'UGU','UGC'},
               {'CAA','CAG'},{'GAA','GAG'},{'GGU','GGC','GGA','GGG'},{'CAU','CAC'},{'AUU','AUC','AUA'},
               {'UUA','UUG','CUU','CUC','CUA','CUG'},{'AAA','AAG'},{'AUG'},{'UUU','UUC'},{'CCU','CCC','CCA','CCG'},
               {'UCU','UCC','UCA','UCG','AGU','AGC'},{'ACU','ACC','ACA','ACG'},{'UGG'},{'UAU','UAC'},{'GUU','GUC','GUA','GUG'}]
+
+#Returns the most easily degraded codon
 def max_deg_mimazi(seq,sort_id):
     mimazi=[]
     for i in range(len(sort_id)):
         mimazi.append(seq[sort_id[i]*3]+seq[sort_id[i]*3+1]+seq[sort_id[i]*3+2])
     return mimazi
 
+#Reture the pre_ph10 value of mRNA
 def pre_ph10(seq_ori,len_seq_fenge):
     
     seq_ori_len=len(seq_ori)
@@ -491,9 +481,11 @@ def pre_ph10(seq_ori,len_seq_fenge):
 
             As = As.to(device)
             pre_out = model(As,fm_seq=fm_seqs)
-            pre_out_ph10_i=pre_out[0,:,1].tolist()  #取gE_WTph10
+            pre_out_ph10_i=pre_out[0,:,1].tolist() 
             pre_out_ph10=pre_out_ph10+pre_out_ph10_i
     return pre_out_ph10
+
+#Returns the sequences after the codon mutation and the corresponding MFE values
 def seq_opti(seq_ori):
     pre_out_ph10_value=pre_ph10(seq_ori,999)
     _,sorted_id=max_deg_pro(pre_out_ph10_value,k_mimazi)
@@ -534,6 +526,7 @@ def seq_opti(seq_ori):
                     
     
     return seq_after_tubian,tubianfangsi
+
 def expand(node):
     """
     Expands a node by using the seq_opti function to generate k potential RNA sequences.
@@ -549,6 +542,7 @@ def expand(node):
         child_node.MFE=temp_MFE
         node.children.append(child_node)
     return child_node
+    
 def trace_back_path(final_node):
     """
     Traces back the path from the given node to the root, collecting the actions (or mutations)
@@ -568,7 +562,6 @@ def simulate(node):
     
     return -node.MFE  # Return the negative MFE value to align with optimization goal
 
-
 def backpropagate(node, value):
     """
     Updates the value and visits of the nodes from the given node up to the root.
@@ -577,6 +570,7 @@ def backpropagate(node, value):
         node.visits += 1
         node.value += value 
         node = node.parent
+
 def find_min_value_node(node):
     def dfs(node):
         if node is None:
@@ -590,6 +584,7 @@ def find_min_value_node(node):
 
     _, min_node = dfs(node)
     return min_node
+
 def monte_carlo_tree_search(root_state):
     """
     Performs the MCTS algorithm given a root state.
@@ -619,7 +614,7 @@ def monte_carlo_tree_search(root_state):
     return best_node
 
 
-
+#The codons are sorted according to their degradability, and the degradability value and the location of the codon are returned
 def max_deg_pro(pre_list,geshu):
     val=[]
     for i in range(len(pre_list)//3):
@@ -634,9 +629,6 @@ def max_deg_pro(pre_list,geshu):
     return vale,sorted_id
 
 
-
-
-
 class RNAOptimization:
     def __init__(self, initial_sequence):
         self.initial_sequence = initial_sequence
@@ -649,15 +641,22 @@ class RNAOptimization:
 
 
 if __name__ == "__main__":
-    #initial_sequence = "AUGGGGACAGUUAAUAAACCAUCGGGGUUCAAAUCGGGC"  # 假设的初始RNA序列
+    #Original sequence to be optimized
     initial_sequence="AUGUUCGUGUUCCUGGUGCUGCUGCCUCUGGUGUCCAGCCAGUGUGUGAACCUGACCACCAGAACACAGCUGCCUCCAGCCUACACCAACAGCUUUACCAGAGGCGUGUACUACCCCGACAAGGUGUUCAGAUCCAGCGUGCUGCACUCUACCCAGGACCUGUUCCUGCCUUUCUUCAGCAACGUGACCUGGUUCCACGCCAUCCACGUGUCCGGCACCAAUGGCACCAAGAGAUUCGACAACCCCGUGCUGCCCUUCAACGACGGGGUGUACUUUGCCAGCACCGAGAAGUCCAACAUCAUCAGAGGCUGGAUCUUCGGCACCACACUGGACAGCAAGACCCAGAGCCUGCUGAUCGUGAACAACGCCACCAACGUGGUCAUCAAAGUGUGCGAGUUCCAGUUCUGCAACGACCCCUUCCUGGGCGUCUACUACCACAAGAACAACAAGAGCUGGAUGGAAAGCGAGUUCCGGGUGUACAGCAGCGCCAACAACUGCACCUUCGAGUACGUGUCCCAGCCUUUCCUGAUGGACCUGGAAGGCAAGCAGGGCAACUUCAAGAACCUGCGCGAGUUCGUGUUUAAGAACAUCGACGGCUACUUCAAGAUCUACAGCAAGCACACCCCUAUCAACCUCGUGCGGGAUCUGCCUCAGGGCUUCUCUGCUCUGGAACCCCUGGUGGAUCUGCCCAUCGGCAUCAACAUCACCCGGUUUCAGACACUGCUGGCCCUGCACAGAAGCUACCUGACACCUGGCGAUAGCAGCAGCGGAUGGACAGCUGGUGCCGCCGCUUACUAUGUGGGCUACCUGCAGCCUAGAACCUUCCUGCUGAAGUACAACGAGAACGGCACCAUCACCGACGCCGUGGAUUGUGCUCUGGAUCCUCUGAGCGAGACAAAGUGCACCCUGAAGUCCUUCACCGUGGAAAAGGGCAUCUACCAGACCAGCAACUUCCGGGUGCAGCCCACCGAAUCCAUCGUGCGGUUCCCCAAUAUCACCAAUCUGUGCCCCUUCGGCGAGGUGUUCAAUGCCACCAGAUUCGCCUCUGUGUACGCCUGGAACCGGAAGCGGAUCAGCAAUUGCGUGGCCGACUACUCCGUGCUGUACAACUCCGCCAGCUUCAGCACCUUCAAGUGCUACGGCGUGUCCCCUACCAAGCUGAACGACCUGUGCUUCACAAACGUGUACGCCGACAGCUUCGUGAUCCGGGGAGAUGAAGUGCGGCAGAUUGCCCCUGGACAGACAGGCAAGAUCGCCGACUACAACUACAAGCUGCCCGACGACUUCACCGGCUGUGUGAUUGCCUGGAACAGCAACAACCUGGACUCCAAAGUCGGCGGCAACUACAAUUACCUGUACCGGCUGUUCCGGAAGUCCAAUCUGAAGCCCUUCGAGCGGGACAUCUCCACCGAGAUCUAUCAGGCCGGCAGCACCCCUUGUAACGGCGUGGAAGGCUUCAACUGCUACUUCCCACUGCAGUCCUACGGCUUUCAGCCCACAAAUGGCGUGGGCUAUCAGCCCUACAGAGUGGUGGUGCUGAGCUUCGAACUGCUGCAUGCCCCUGCCACAGUGUGCGGCCCUAAGAAAAGCACCAAUCUCGUGAAGAACAAAUGCGUGAACUUCAACUUCAACGGCCUGACCGGCACCGGCGUGCUGACAGAGAGCAACAAGAAGUUCCUGCCAUUCCAGCAGUUUGGCCGGGAUAUCGCCGAUACCACAGACGCCGUUAGAGAUCCCCAGACACUGGAAAUCCUGGACAUCACCCCUUGCAGCUUCGGCGGAGUGUCUGUGAUCACCCCUGGCACCAACACCAGCAAUCAGGUGGCAGUGCUGUACCAGGACGUGAACUGUACCGAAGUGCCCGUGGCCAUUCACGCCGAUCAGCUGACACCUACAUGGCGGGUGUACUCCACCGGCAGCAAUGUGUUUCAGACCAGAGCCGGCUGUCUGAUCGGAGCCGAGCACGUGAACAAUAGCUACGAGUGCGACAUCCCCAUCGGCGCUGGAAUCUGCGCCAGCUACCAGACACAGACAAACAGCCCUCGGAGAGCCAGAAGCGUGGCCAGCCAGAGCAUCAUUGCCUACACAAUGUCUCUGGGCGCCGAGAACAGCGUGGCCUACUCCAACAACUCUAUCGCUAUCCCCACCAACUUCACCAUCAGCGUGACCACAGAGAUCCUGCCUGUGUCCAUGACCAAGACCAGCGUGGACUGCACCAUGUACAUCUGCGGCGAUUCCACCGAGUGCUCCAACCUGCUGCUGCAGUACGGCAGCUUCUGCACCCAGCUGAAUAGAGCCCUGACAGGGAUCGCCGUGGAACAGGACAAGAACACCCAAGAGGUGUUCGCCCAAGUGAAGCAGAUCUACAAGACCCCUCCUAUCAAGGACUUCGGCGGCUUCAAUUUCAGCCAGAUUCUGCCCGAUCCUAGCAAGCCCAGCAAGCGGAGCUUCAUCGAGGACCUGCUGUUCAACAAAGUGACACUGGCCGACGCCGGCUUCAUCAAGCAGUAUGGCGAUUGUCUGGGCGACAUUGCCGCCAGGGAUCUGAUUUGCGCCCAGAAGUUUAACGGACUGACAGUGCUGCCUCCUCUGCUGACCGAUGAGAUGAUCGCCCAGUACACAUCUGCCCUGCUGGCCGGCACAAUCACAAGCGGCUGGACAUUUGGAGCAGGCGCCGCUCUGCAGAUCCCCUUUGCUAUGCAGAUGGCCUACCGGUUCAACGGCAUCGGAGUGACCCAGAAUGUGCUGUACGAGAACCAGAAGCUGAUCGCCAACCAGUUCAACAGCGCCAUCGGCAAGAUCCAGGACAGCCUGAGCAGCACAGCAAGCGCCCUGGGAAAGCUGCAGGACGUGGUCAACCAGAAUGCCCAGGCACUGAACACCCUGGUCAAGCAGCUGUCCUCCAACUUCGGCGCCAUCAGCUCUGUGCUGAACGAUAUCCUGAGCAGACUGGACaaagUgGAGGCCGAGGUGCAGAUCGACAGACUGAUCACAGGCAGACUGCAGAGCCUCCAGACAUACGUGACCCAGCAGCUGAUCAGAGCCGCCGAGAUUAGAGCCUCUGCCAAUCUGGCCGCCACCAAGAUGUCUGAGUGUGUGCUGGGCCAGAGCAAGAGAGUGGACUUUUGCGGCAAGGGCUACCACCUGAUGAGCUUCCCUCAGUCUGCCCCUCACGGCGUGGUGUUUCUGCACGUGACAUAUGUGCCCGCUCAAGAGAAGAAUUUCACCACCGCUCCAGCCAUCUGCCACGACGGCAAAGCCCACUUUCCUAGAGAAGGCGUGUUCGUGUCCAACGGCACCCAUUGGUUCGUGACACAGCGGAACUUCUACGAGCCCCAGAUCAUCACCACCGACAACACCUUCGUGUCUGGCAACUGCGACGUCGUGAUCGGCAUUGUGAACAAUACCGUGUACGACCCUCUGCAGCCCGAGCUGGACAGCUUCAAAGAGGAACUGGACAAGUACUUUAAGAACCACACAAGCCCCGACGUGGACCUGGGCGAUAUCAGCGGAAUCAAUGCCAGCGUCGUGAACAUCCAGAAAGAGAUCGACCGGCUGAACGAGGUGGCCAAGAAUCUGAACGAGAGCCUGAUCGACCUGCAAGAACUGGGGAAGUACGAGCAGUACAUCAAGUGGCCCUGGUACAUCUGGCUGGGCUUUAUCGCCGGACUGAUUGCCAUCGUGAUGGUCACAAUCAUGCUGUGUUGCAUGACCAGCUGCUGUAGCUGCCUGAAGGGCUGUUGUAGCUGUGGCAGCUGCUGCAAGUUCGACGAGGACGAUUCUGAGCCCGUGCUGAAGGGCGUGAAACUGCACUACACA"
     initial_sequence=initial_sequence.upper()
+    
+    #Calculate the MFE value of original sequence
     print("initial_sequence_MFE:")
     print(free_energy(initial_sequence, package='vienna_2'))
+    
+    #Perform optimization on the original sequence using MCTS
     optimizer = RNAOptimization(initial_sequence)
     best_node = optimizer.optimize_sequence()
+    
     print(f"Optimized Sequence: {best_node.state}")
     print("optimized_sequence_MFE:")
     print(best_node.MFE)
+
+    # fina the optimization path
     optimization_path = trace_back_path(best_node)
     print("Optimization Path:", optimization_path)
