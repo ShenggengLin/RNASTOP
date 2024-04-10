@@ -26,7 +26,7 @@ cd ./RNADegpre/scripts
 conda activate RNADegpre_env
 python RNADegpre_train.py
 ```
-In the code file, you can modify the model's hyperparameters and training data.
+In the code file, you can modify the model's hyperparameters and training data. And there are detailed comments for each function in the code file.
 
 ## Model Test
 ```
