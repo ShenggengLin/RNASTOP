@@ -1,3 +1,4 @@
+# Import the required libraries
 import os
 import torch
 import torch.nn as nn
@@ -15,13 +16,13 @@ from numpy import random
 import pickle
 import scipy.stats
 import math
-
 from arnie.pfunc import pfunc
 from arnie.free_energy import free_energy
 from arnie.bpps import bpps
 from arnie.mfe import mfe
 import arnie.utils as utils
 
+#The hyperparameters of the model can be modified here
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 learning_rate = 4.0e-4
 Batch_size = 64
@@ -29,29 +30,6 @@ Conv_kernel = 7
 dropout = 0.3
 embedding_dim = 128
 num_encoder_layers = 4
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print("device:", device)
-import fm
-
-# Load RNA-FM model
-fm_pretrain_model, fm_pretrain_alphabet = fm.pretrained.rna_fm_t12()
-fm_pretrain_batch_converter = fm_pretrain_alphabet.get_batch_converter()
-fm_pretrain_model = fm_pretrain_model.to(device)
-
-from transformers import AutoTokenizer, AutoModel
-
-dnapt2_PATH = "./DNABERT6/"
-dnapt2_tokenizer = AutoTokenizer.from_pretrained(dnapt2_PATH)
-dnapt2_model = AutoModel.from_pretrained(dnapt2_PATH).to(device)  # load model
-
-tokens = 'ACGU().BEHIMSXDF'  # D start,F end
-vocab_size = len(tokens)
-
-SEED = 4
-torch.manual_seed(SEED)
-torch.backends.cudnn.deterministic = True
-
 patience = 50
 error_alpha = 0.5
 error_beta = 5
@@ -60,7 +38,36 @@ nhead = 4
 nStrDim = 8
 Use_pretrain_model = True
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print("device:", device)
 
+# Load RNA-FM model
+import fm
+fm_pretrain_model, fm_pretrain_alphabet = fm.pretrained.rna_fm_t12()
+fm_pretrain_batch_converter = fm_pretrain_alphabet.get_batch_converter()
+fm_pretrain_model = fm_pretrain_model.to(device)
+
+# Load DNABERT model
+from transformers import AutoTokenizer, AutoModel
+dnapt2_PATH = "./DNABERT6/"
+dnapt2_tokenizer = AutoTokenizer.from_pretrained(dnapt2_PATH)
+dnapt2_model = AutoModel.from_pretrained(dnapt2_PATH).to(device)  # load model
+
+#Definition the word list
+tokens = 'ACGU().BEHIMSXDF'  # D start,F end
+vocab_size = len(tokens)
+
+#Fixed random seeds to ensure reproducibility of the results
+SEED = 4
+random.seed(SEED)
+os.environ['PYTHONHASHSEED'] = str(SEED)
+np.random.seed(SEED)
+torch.manual_seed(SEED)
+torch.cuda.manual_seed(SEED)
+torch.cuda.manual_seed_all(SEED)
+torch.backends.cudnn.deterministic = True
+
+# Definition the RNADataset
 class RNADataset(Dataset):
     def __init__(self, seqs, seqsOri, Stru, Loop, labels, As, train_sam_wei=None, train_error_weights=None,
                  sam_aug_flag=None):
@@ -89,7 +96,7 @@ class RNADataset(Dataset):
     def __len__(self):
         return self.length
 
-
+#Get the embedding of the mrna sequences
 def preprocess_inputs(np_seq):
     re_seq = []
     for i in range(len(np_seq)):
@@ -99,7 +106,7 @@ def preprocess_inputs(np_seq):
 
     return re_seq
 
-
+#Get the adjacency matrix of the mrna
 def get_structure_adj(data_seq_length, data_structure, data_sequence):
     Ss = []
     for i in (range(len(data_sequence))):
@@ -138,7 +145,7 @@ def get_structure_adj(data_seq_length, data_structure, data_sequence):
 
     return Ss
 
-
+# Define the RNADegpre model
 class Model(nn.Module):
     def __init__(self, vocab_size, embedding_dim, pred_dim, dropout, nhead, num_encoder_layers):
         super().__init__()
@@ -335,7 +342,7 @@ class Model(nn.Module):
 
             return pre_out
 
-
+#get the 1-dimensional and 2-dimensional distance matrix of mRNA
 def get_distance_matrix(As):
     idx = np.arange(As.shape[1])
     Ds = []
@@ -353,8 +360,6 @@ def get_distance_matrix(As):
         Dss.append(Ds ** i)
     Ds = np.stack(Dss, axis=3)
     return Ds
-
-
 def calc_neighbor(d, dim, n):
     lst_x, lst_y = np.where(d == n)
     for c, x in enumerate(lst_x):
@@ -368,8 +373,6 @@ def calc_neighbor(d, dim, n):
         if y - 1 >= 0:
             d[x, y - 1] = min(d[x, y - 1], n + 1)
     return d
-
-
 def get_distance_matrix_2d(Ss):
     Ds = []
     n = Ss.shape[0]
@@ -386,18 +389,15 @@ def get_distance_matrix_2d(Ss):
     Ds = np.array(Ds) + 1
     Ds = 1 / Ds
     Ds = Ds[:, :, :, None]
-
     Dss = []
     for i in [1, 2, 4]:
         Dss.append(Ds ** i)
     Ds = np.stack(Dss, axis=3)
     return Ds[:, :, :, :, 0]
 
-
+# Defined loss function
 def mean_squared(y_true, y_pred):
     return torch.mean(torch.sqrt(torch.mean((y_true - y_pred) ** 2, axis=1)))  # a number =each sample site
-
-
 def MCRMSE(y_pred, y_true):
     y_true = torch.where(torch.isnan(y_true), y_pred, y_true)
 
@@ -406,12 +406,8 @@ def MCRMSE(y_pred, y_true):
     s = s + mean_squared(y_true[:, :, 2], y_pred[:, :, 2]) / 1.0
     s = s / 3.0
     return s
-
-
 def mean_squared_MSE(y_true, y_pred):
     return torch.mean(torch.sqrt(torch.mean((y_true - y_pred) ** 2)))  # a number =each sample site
-
-
 def MSE(y_pred, y_true):
     y_true = torch.where(torch.isnan(y_true), y_pred, y_true)
     s = []
@@ -420,18 +416,18 @@ def MSE(y_pred, y_true):
 
     return s
 
-
+# Define different data types
 pred_cols_test = ['reactivity', 'deg_Mg_pH10', 'deg_Mg_50C']
 
-
+#Standardize the list data
 def nor_list(list_a):
     max_val = max(list_a)
     min_val = min(list_a)
     nor_list_a = [(x - min_val) / (max_val - min_val) for x in list_a]
     return nor_list_a
 
-
-def train_fold():
+#The mRNA sequence is sorted according to the MSE of the mRNA sequence, and the sequenced mRNA is output
+def test():
     testDataFrame_107 = pd.read_csv('../data/test_dataset_private_107.csv', encoding='utf-8')
 
     testDataFrame_130 = pd.read_csv('../data/test_dataset_private_130.csv', encoding='utf-8')
@@ -851,4 +847,4 @@ def train_fold():
         "private loss: [%.6f]" % (((test_loss_107 / test_batch_num_107) + (test_loss_130 / test_batch_num_130)) / 2.0))
 
 
-train_fold()
+test()
