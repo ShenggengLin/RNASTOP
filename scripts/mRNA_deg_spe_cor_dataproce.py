@@ -1,4 +1,4 @@
-#dna pretrain
+# Import the required libraries
 import os
 import torch
 import torch.nn as nn
@@ -12,21 +12,18 @@ import editdistance
 from torchsummary import summary
 from torchcrf import CRF
 from numpy import random
-
 from arnie.pfunc import pfunc
 from arnie.free_energy import free_energy
 from arnie.bpps import bpps
 from arnie.mfe import mfe
 import arnie.utils as utils
+
 def main():
     
-    
-
     testDataFrame=pd.read_excel('./data/GSE173083_188.xlsx')
     print("testDataFrame shape:",testDataFrame.shape)
     testDataFrame2=pd.read_csv('./data/new_sequences.csv',encoding='utf-8')
     print("testDataFrame2 shape:",testDataFrame2.shape)
-    
     
     testSeq1 = np.array(testDataFrame['RNA sequence'].values.tolist())
     testSeq2 = np.array(testDataFrame2['sequence'].values.tolist())
@@ -50,11 +47,6 @@ def main():
     testDataFrame['loop']=loop
     testDataFrame.to_csv("./data/GSE173083_188_withstrloop.csv")
 
-
-
-    
-    
-    
 main()
     
 
