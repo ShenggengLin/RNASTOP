@@ -20,13 +20,22 @@ Download the RNA-FM model from https://github.com/ml4bio/RNA-FM and configure it
 
 Download the DNABERT model weights from https://drive.google.com/drive/folders/1nzlKD29vTcI_3bNPcfjEHT4jYCaW_Ae6?usp=sharing and put it in the scripts/DNABERT6 directory.
 
-## Model Train
+## Model train and test on the OpenVaccine Kaggle competition dataset
 ```
 cd ./RNADegpre/scripts
 conda activate RNADegpre_env
 python RNADegpre_train.py
 ```
 In the code file, you can modify the model's hyperparameters and training data. And there are detailed comments for each function in the code file.
+
+## Model test on the dataset of full-length mRNAs
+```
+cd ./RNADegpre/scripts
+conda activate RNADegpre_env
+python mRNA_deg_spe_cor_dataproce.py
+python mRNA_deg_spe_cor.py
+```
+In order to test the performance of the RNADegpre model on the dataset of full-length mRNAs, you need to first use mRNA_deg_spe_cor_dataproce.py to preprocess the dataset of full-length mRNAs, and get the GSE173083_188_withstrloop.csv file, and then use the GSE173083_188_withstrloop.csv file as the input of mRNA_deg_spe_cor.py to test the model performance. The output of mRNA_deg_spe_cor.py is the correlation coefficient between the predicted value predicted by the model and the experimental value.
 
 ## Model Test
 ```
