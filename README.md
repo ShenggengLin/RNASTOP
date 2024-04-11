@@ -88,3 +88,6 @@ conda activate RNADegpre_env
 python MCTS_rnaopt_covid19.py
 ```
 The inputs of beam_rnaopt_covid19.py and MCTS_rnaopt_covid19.py are mRNA sequences to be optimized, such as COVID-19 vaccine sequences. In the code file, you can modify the RNA sequence to be optimized. The code will output the optimization process and the optimized sequence. And there are detailed comments for each function in the code file.
+
+## Note
+Some of the drawing programs used in this study are also provided in the scripts directory.
