@@ -1,4 +1,4 @@
-#dna pretrain
+# Import the required libraries
 import os
 import torch
 import torch.nn as nn
@@ -15,12 +15,13 @@ from numpy import random
 import pickle
 import scipy.stats
 import math
-
 from arnie.pfunc import pfunc
 from arnie.free_energy import free_energy
 from arnie.bpps import bpps
 from arnie.mfe import mfe
 import arnie.utils as utils
+
+#The hyperparameters of the model can be modified here
 os.environ['CUDA_VISIBLE_DEVICES']='0'
 learning_rate=4.0e-4
 Batch_size=1
@@ -28,25 +29,6 @@ Conv_kernel=7
 dropout=0.3
 embedding_dim=128
 num_encoder_layers=4
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print("device:",device)
-import fm
-# Load RNA-FM model
-fm_pretrain_model, fm_pretrain_alphabet = fm.pretrained.rna_fm_t12()
-fm_pretrain_batch_converter = fm_pretrain_alphabet.get_batch_converter()
-fm_pretrain_model=fm_pretrain_model.to(device)
-
-
-tokens = 'ACGU().BEHIMSXDF'   #D start,F end
-vocab_size=len(tokens)
-
-SEED=4
-torch.manual_seed(SEED)
-torch.backends.cudnn.deterministic=True
-
-
-
 patience=50
 error_alpha=0.5
 error_beta=5
@@ -54,7 +36,31 @@ epochs=1000
 nhead=4
 nStrDim=8
 Use_pretrain_model=True
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print("device:",device)
 
+# Load RNA-FM model
+import fm
+fm_pretrain_model, fm_pretrain_alphabet = fm.pretrained.rna_fm_t12()
+fm_pretrain_batch_converter = fm_pretrain_alphabet.get_batch_converter()
+fm_pretrain_model=fm_pretrain_model.to(device)
+
+#Definition the word list
+tokens = 'ACGU().BEHIMSXDF'   #D start,F end
+vocab_size=len(tokens)
+
+#Fixed random seeds to ensure reproducibility of the results
+SEED = 4
+random.seed(SEED)
+os.environ['PYTHONHASHSEED'] = str(SEED)
+np.random.seed(SEED)
+torch.manual_seed(SEED)
+torch.cuda.manual_seed(SEED)
+torch.cuda.manual_seed_all(SEED)
+torch.backends.cudnn.deterministic = True
+
+
+# Definition the RNADataset
 class RNADataset(Dataset):
     def __init__(self,seqs,seqsOri, Stru,Loop,As):
         if Use_pretrain_model:
@@ -74,6 +80,7 @@ class RNADataset(Dataset):
     def __len__(self):
         return self.length
 
+#Get the embedding of the mrna sequences
 def preprocess_inputs(np_seq):
 
     re_seq=[]
@@ -86,7 +93,7 @@ def preprocess_inputs(np_seq):
 
     return re_seq
 
-
+#Get the adjacency matrix of the mrna 
 def get_structure_adj(seq_length,structure,sequence):
     
     
@@ -125,7 +132,7 @@ def get_structure_adj(seq_length,structure,sequence):
 
 
     
-
+# Define the RNADegpre model
 class Model(nn.Module):
     def __init__(self,vocab_size,embedding_dim,pred_dim,dropout,nhead,num_encoder_layers):
         super().__init__()
@@ -330,7 +337,7 @@ class Model(nn.Module):
 
 
 
-
+#get the 1-dimensional and 2-dimensional distance matrix of mRNA
 def get_distance_matrix(As):
     idx = np.arange(As.shape[0])
     Ds = []
@@ -348,7 +355,6 @@ def get_distance_matrix(As):
         Dss.append(Ds ** i)
     Ds = np.stack(Dss, axis=2)
     return Ds
-
 def calc_neighbor(d, dim, n):
     lst_x,lst_y = np.where(d==n)
     for c, x in enumerate(lst_x):
@@ -399,7 +405,7 @@ def get_As(testSeqLen, testStruOri, testSeqOri):
     
     del testStruAdj, Ds_test, DDs_test
     return As_test
-
+# train model
 def train_fold():
     
     
@@ -481,7 +487,7 @@ def train_fold():
     pickle.dump(model_output, open( "mRNA_deg_spe_cor_modelpre.p", "wb" ) )
     model_output=pickle.load( open( "mRNA_deg_spe_cor_modelpre.p", "rb" ) )
     
-
+# test model
 def test():
     model_output=pickle.load( open( "mRNA_deg_spe_cor_modelpre.p", "rb" ) )
     testDataFrame=pd.read_csv('./data/GSE173083_188_withstrloop.csv')
