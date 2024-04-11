@@ -20,6 +20,8 @@ Download the RNA-FM model from https://github.com/ml4bio/RNA-FM and configure it
 
 Download the DNABERT model weights from https://drive.google.com/drive/folders/1nzlKD29vTcI_3bNPcfjEHT4jYCaW_Ae6?usp=sharing and put it in the scripts/DNABERT6 directory.
 
+## Configure arnie
+In the RNADegpre model, it is necessary to predict the secondary structure of mRNA based on its sequence. In the process of mRNA sequence optimization, it is also necessary to calculate the minimum free energy of mRNA. Both processes require the use of the arnie library. arnie library is a python API to compute RNA energetics and do structure prediction across multiple secondary structure packages. please download the arnie library from https://github.com/DasLab/arnie and configure it according to the instructions. Then place the arnie library under the scripts directory, just like the current code directory.
 ## Model train and test on the OpenVaccine Kaggle competition dataset
 ```
 cd ./RNADegpre/scripts
