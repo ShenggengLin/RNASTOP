@@ -37,6 +37,16 @@ python mRNA_deg_spe_cor.py
 ```
 In order to test the performance of the RNADegpre model on the dataset of full-length mRNAs, you need to first use mRNA_deg_spe_cor_dataproce.py to preprocess the dataset of full-length mRNAs, and get the GSE173083_188_withstrloop.csv file, and then use the GSE173083_188_withstrloop.csv file as the input of mRNA_deg_spe_cor.py to test the model performance. The output of mRNA_deg_spe_cor.py is the correlation coefficient between the predicted value predicted by the model and the experimental value.
 
+## Large language models assist RNADegpre in transfer learning
+```
+cd ./RNADegpre/scripts
+conda activate RNADegpre_env
+python RNADegpre_train.py
+python RNADegper_withoutpretrain_train.py
+python LLMs_assist_transfer_learning.py
+```
+In order to verify whether the large language model can assist RNADegpre in transfer learning, you need to first run RNADegpre_train.py to get the parameters of the RNADegpre model, then run RNADegper_withoutpretrain_train.py to get the parameters of the RNADegpre model without the large language model, and finally run LLMs_assist_transfer_learning.py to obtain the experimental results in the paper. The output of LLMs_assist_transfer_learning.py is the sequence similarity values and the MCRMSE values of the model in three different cases, as well as the t-SNE plot of the sequences distribution.
+
 ## Model Test
 ```
 cd ./RNADegpre/scripts
