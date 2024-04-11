@@ -1,4 +1,4 @@
-#dna pretrain
+# Import the required libraries
 import os
 import torch
 import torch.nn as nn
@@ -12,12 +12,13 @@ import editdistance
 from torchsummary import summary
 from torchcrf import CRF
 from numpy import random
-
 from arnie.pfunc import pfunc
 from arnie.free_energy import free_energy
 from arnie.bpps import bpps
 from arnie.mfe import mfe
 import arnie.utils as utils
+
+#The hyperparameters of the model can be modified here
 os.environ['CUDA_VISIBLE_DEVICES']='0'
 learning_rate=4.0e-4
 Batch_size=64
@@ -25,21 +26,16 @@ Conv_kernel=7
 dropout=0.3
 embedding_dim=128
 num_encoder_layers=4
-
+patience=50
+error_alpha=0.5
+error_beta=5
+epochs=1000
+nhead=4
+nStrDim=8
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("device:",device)
 
-
-
-
-
-
-
-
-
-
-
-
+#The mRNA sequences are clustered, and each mRNA is assigned a weight according to the clustering results
 def sample_weight(text_lists,thred=20):
     clusters=[]
     for text in text_lists:
@@ -72,26 +68,21 @@ def sample_weight(text_lists,thred=20):
 
     return sam_wei
 
-
-
-
-
+#Definition the word list
 tokens = 'ACGU().BEHIMSXDF'   #D start,F end
 vocab_size=len(tokens)
 
-SEED=4
+#Fixed random seeds to ensure reproducibility of the results
+SEED = 4
+random.seed(SEED)
+os.environ['PYTHONHASHSEED'] = str(SEED)
+np.random.seed(SEED)
 torch.manual_seed(SEED)
-torch.backends.cudnn.deterministic=True
+torch.cuda.manual_seed(SEED)
+torch.cuda.manual_seed_all(SEED)
+torch.backends.cudnn.deterministic = True
 
-
-
-patience=50
-error_alpha=0.5
-error_beta=5
-epochs=1000
-nhead=4
-nStrDim=8
-
+# Definition the RNADataset
 class RNADataset(Dataset):
     def __init__(self,seqs,seqsOri, Stru,Loop,labels,As,train_sam_wei=None,train_error_weights=None,sam_aug_flag=None):
         
@@ -115,6 +106,7 @@ class RNADataset(Dataset):
     def __len__(self):
         return self.length
 
+#Get the embedding of the mrna sequences
 def preprocess_inputs(np_seq):
 
     re_seq=[]
@@ -127,7 +119,7 @@ def preprocess_inputs(np_seq):
 
     return re_seq
 
-
+#Get the adjacency matrix of the mrna
 def get_structure_adj(data_seq_length,data_structure,data_sequence):
     Ss = []
     for i in (range(len(data_sequence))):
@@ -155,11 +147,7 @@ def get_structure_adj(data_seq_length,data_structure,data_sequence):
 
         a_strc = np.stack([a for a in a_structures.values()], axis=2)
 
-
         a_strc = np.sum(a_strc, axis=2, keepdims=True)
-
-
-
 
         Ss.append(a_strc)
 
@@ -170,11 +158,7 @@ def get_structure_adj(data_seq_length,data_structure,data_sequence):
 
     return Ss
 
-
-
-    
-
-
+# Define the RNADegpre model
 class Model(nn.Module):
     def __init__(self,vocab_size,embedding_dim,pred_dim,dropout,nhead,num_encoder_layers):
         super().__init__()
@@ -330,13 +314,15 @@ class Model(nn.Module):
             
         return pre_out
 
-
+# Define different data types
 pred_cols_train = ['reactivity', 'deg_Mg_pH10', 'deg_Mg_50C', 'deg_pH10', 'deg_50C']
 pred_cols_test = ['reactivity', 'deg_Mg_pH10', 'deg_Mg_50C']
 
+# In the process of training the model, different weights are assigned to different data types
 LOSS_WGTS = [0.3, 0.3, 0.3, 0.05, 0.05]
 pred_cols_errors=['reactivity_error', 'deg_error_Mg_pH10', 'deg_error_Mg_50C','deg_error_pH10','deg_error_50C']
 
+# Defined loss function
 def mean_squared(y_true, y_pred):
 
     return torch.mean(torch.sqrt(torch.mean((y_true-y_pred)**2, axis=1))) # a number =each sample site
@@ -363,7 +349,7 @@ def MCRMSE_NAN_SW_TEW(y_pred,y_true,sam_weig=None,tew=None):
         s += (mean_squared_sw_tew(y_true[:, :, i], y_pred[:, :, i], sample_weight=sam_weig, exp_err=tew[:, :, i]) /1.0) * LOSS_WGTS[i]
     return s
     
-
+# The data is preprocessed and nan is used to replace the data that does not meet the filtering conditions
 def filter_train(df):
     for i in range(len(df)):
         if df['SN_filter'][i]==0:
@@ -401,7 +387,7 @@ def filter_train(df):
     return df
 
 
-
+#get the 1-dimensional and 2-dimensional distance matrix of mRNA
 def get_distance_matrix(As):
     idx = np.arange(As.shape[1])
     Ds = []
@@ -419,7 +405,6 @@ def get_distance_matrix(As):
         Dss.append(Ds ** i)
     Ds = np.stack(Dss, axis=3)
     return Ds
-
 def calc_neighbor(d, dim, n):
     lst_x,lst_y = np.where(d==n)
     for c, x in enumerate(lst_x):
@@ -455,6 +440,8 @@ def get_distance_matrix_2d(Ss):
         Dss.append(Ds ** i)
     Ds = np.stack(Dss, axis=3)
     return Ds[:, :, :, :, 0]
+
+# train and test model
 def train_fold():
     train_pubtest_DataFrame=pd.read_json('./data/Kaggle_train.json', lines=True)
 
