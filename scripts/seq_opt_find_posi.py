@@ -1,3 +1,4 @@
+# Import the required libraries
 import os
 import torch
 import torch.nn as nn
@@ -11,13 +12,13 @@ import editdistance
 from torchsummary import summary
 from torchcrf import CRF
 from numpy import random
-
 from arnie.pfunc import pfunc
 from arnie.free_energy import free_energy
 from arnie.bpps import bpps
 from arnie.mfe import mfe
 import arnie.utils as utils
 
+#Fixed random seeds to ensure reproducibility of the results
 seed = 4
 random.seed(seed)
 os.environ['PYTHONHASHSEED'] = str(seed)
