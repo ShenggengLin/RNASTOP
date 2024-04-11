@@ -1,4 +1,4 @@
-#dna pretrain
+# Import the required libraries
 import os
 import torch
 import torch.nn as nn
@@ -12,21 +12,19 @@ import editdistance
 from torchsummary import summary
 from torchcrf import CRF
 from numpy import random
-
 from arnie.pfunc import pfunc
 from arnie.free_energy import free_energy
 from arnie.bpps import bpps
 from arnie.mfe import mfe
 import arnie.utils as utils
-
-
 from Bio import pairwise2
 from Bio.Seq import Seq
-import pickle 
-
+import pickle
 from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
 from matplotlib.ticker import NullFormatter
+
+#Fixed random seeds to ensure reproducibility of the results
 seed = 2024
 random.seed(seed)
 os.environ['PYTHONHASHSEED'] = str(seed)
@@ -36,6 +34,7 @@ torch.cuda.manual_seed(seed)
 torch.cuda.manual_seed_all(seed)
 torch.backends.cudnn.deterministic = True
 
+#The hyperparameters of the model can be modified here
 os.environ['CUDA_VISIBLE_DEVICES']='0'
 learning_rate=4.0e-4
 Batch_size=64
@@ -44,30 +43,6 @@ dropout=0.3
 embedding_dim=128
 num_encoder_layers=4
 os.environ['TOKENIZERS_PARALLELISM']='false'
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print("device:",device)
-import fm
-# Load RNA-FM model
-fm_pretrain_model, fm_pretrain_alphabet = fm.pretrained.rna_fm_t12()
-fm_pretrain_batch_converter = fm_pretrain_alphabet.get_batch_converter()
-fm_pretrain_model=fm_pretrain_model.to(device)
-
-from transformers import AutoTokenizer, AutoModel
-dnapt2_PATH = "./DNABERT6/" 
-dnapt2_tokenizer = AutoTokenizer.from_pretrained(dnapt2_PATH)
-dnapt2_model = AutoModel.from_pretrained(dnapt2_PATH).to(device) # load model
-
-
-tokens = 'ACGU().BEHIMSXDF'   #D start,F end
-vocab_size=len(tokens)
-
-SEED=4
-torch.manual_seed(SEED)
-torch.backends.cudnn.deterministic=True
-
-
-
 patience=50
 error_alpha=0.5
 error_beta=5
@@ -75,7 +50,27 @@ epochs=1000
 nhead=4
 nStrDim=8
 Use_pretrain_model=True
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print("device:",device)
 
+# Load RNA-FM model
+import fm
+fm_pretrain_model, fm_pretrain_alphabet = fm.pretrained.rna_fm_t12()
+fm_pretrain_batch_converter = fm_pretrain_alphabet.get_batch_converter()
+fm_pretrain_model=fm_pretrain_model.to(device)
+
+# Load DNABERT model
+from transformers import AutoTokenizer, AutoModel
+dnapt2_PATH = "./DNABERT6/" 
+dnapt2_tokenizer = AutoTokenizer.from_pretrained(dnapt2_PATH)
+dnapt2_model = AutoModel.from_pretrained(dnapt2_PATH).to(device) # load model
+
+#Definition the word list
+tokens = 'ACGU().BEHIMSXDF'   #D start,F end
+vocab_size=len(tokens)
+
+
+# Definition the RNADataset
 class RNADataset(Dataset):
     def __init__(self,seqs,seqsOri, Stru,Loop,labels,As,train_sam_wei=None,train_error_weights=None,sam_aug_flag=None):
         
@@ -99,6 +94,8 @@ class RNADataset(Dataset):
 
     def __len__(self):
         return self.length
+
+# Definition the RNADataset of RNADegpre without pretrain
 class RNADataset_nopretrain(Dataset):
     def __init__(self,seqs,seqsOri, Stru,Loop,labels,As,train_sam_wei=None,train_error_weights=None,sam_aug_flag=None):
         
@@ -121,6 +118,8 @@ class RNADataset_nopretrain(Dataset):
 
     def __len__(self):
         return self.length
+
+#Get the embedding of the mrna sequences
 def preprocess_inputs(np_seq):
 
     re_seq=[]
@@ -132,6 +131,8 @@ def preprocess_inputs(np_seq):
 
 
     return re_seq
+
+# The data is preprocessed and nan is used to replace the data that does not meet the filtering conditions
 def filter_train(df):
     for i in range(len(df)):
         if df['SN_filter'][i]==0:
@@ -168,7 +169,7 @@ def filter_train(df):
 
     return df
 
-
+# Clustering mRNA sequences
 def seq_cluster(text_lists,thred=0.75):
     clusters=[]
     for i in range(len(text_lists)):
@@ -198,6 +199,8 @@ def seq_cluster(text_lists,thred=0.75):
     print('max_num:{}'.format(max_num))
     print('min_num:{}'.format(min_num))
     return clusters
+
+# Calculate mRNA sequence similarity
 def blast_similirity(train_seq,test_seq):
     simi_list=[]
     for i in range(len(test_seq)):
@@ -209,6 +212,7 @@ def blast_similirity(train_seq,test_seq):
     
     return simi_list
 
+#get the 1-dimensional and 2-dimensional distance matrix of mRNA
 def get_distance_matrix(As):
     idx = np.arange(As.shape[1])
     Ds = []
@@ -226,7 +230,6 @@ def get_distance_matrix(As):
         Dss.append(Ds ** i)
     Ds = np.stack(Dss, axis=3)
     return Ds
-
 def calc_neighbor(d, dim, n):
     lst_x,lst_y = np.where(d==n)
     for c, x in enumerate(lst_x):
@@ -262,6 +265,8 @@ def get_distance_matrix_2d(Ss):
         Dss.append(Ds ** i)
     Ds = np.stack(Dss, axis=3)
     return Ds[:, :, :, :, 0]
+
+#Get the adjacency matrix of the mrna
 def get_structure_adj(data_seq_length,data_structure,data_sequence):
     Ss = []
     for i in (range(len(data_sequence))):
@@ -304,7 +309,8 @@ def get_structure_adj(data_seq_length,data_structure,data_sequence):
 
     return Ss
 pred_cols_test = ['reactivity', 'deg_Mg_pH10', 'deg_Mg_50C']
-    
+
+# Define the RNADegpre model
 class Model(nn.Module):
     def __init__(self,vocab_size,embedding_dim,pred_dim,dropout,nhead,num_encoder_layers):
         super().__init__()
@@ -484,6 +490,7 @@ class Model(nn.Module):
             
         return pre_out
 
+# Define the RNADegpre model without pre-train
 class Model_nopretrain(nn.Module):
     def __init__(self,vocab_size,embedding_dim,pred_dim,dropout,nhead,num_encoder_layers):
         super().__init__()
@@ -638,8 +645,9 @@ class Model_nopretrain(nn.Module):
 
             
         return pre_out
-def mean_squared(y_true, y_pred):
 
+# Defined loss function
+def mean_squared(y_true, y_pred):
     return torch.mean(torch.sqrt(torch.mean((y_true-y_pred)**2))) # a number =each sample site
 def MCRMSE(y_pred,y_true):
     y_true = torch.where(torch.isnan(y_true), y_pred, y_true)
@@ -661,6 +669,8 @@ def MSE(y_pred,y_true):
         s.append((mean_squared_MSE(y_true[i], y_pred[i]) / 1.0).item())
     
     return s
+
+# train and test model
 def train_fold():
     train_pubtest_DataFrame=pd.read_json('./data/Kaggle_train.json', lines=True)
 
@@ -816,7 +826,8 @@ def train_fold():
         loss2 = metric_func(pre_out[1, :test_seq_scored_130,:pred_dim_130], labels[1,:,:])  # 1,+1,because [start]
         print(loss1.item())
         print(loss2.item())
-        
+
+# train and test model on different condition
 def train_fold_avg():
     train_pubtest_DataFrame=pd.read_json('./data/Kaggle_train.json', lines=True)
 
@@ -983,6 +994,8 @@ def train_fold_avg():
 
 tokens_tsne = 'ACGUP'   #D start,F end
 vocab_size_tsne=len(tokens_tsne)
+
+#Get the embedding of the mrna sequences as the inputs of tSNE
 def preprocess_inputs_tsne(np_seq):
 
     re_seq=[]
@@ -995,6 +1008,7 @@ def preprocess_inputs_tsne(np_seq):
 
     return re_seq
 
+# tSNE drawing settings
 def plot_embedding(data, label, title):
     x_min, x_max = np.min(data, 0), np.max(data, 0)
     data = (data - x_min) / (x_max - x_min)
@@ -1011,7 +1025,7 @@ def plot_embedding(data, label, title):
     plt.yticks([])
     #plt.title(title)
     
-    ax.xaxis.set_major_formatter(NullFormatter())  # 设置标签显示格式为空
+    ax.xaxis.set_major_formatter(NullFormatter())  
     ax.yaxis.set_major_formatter(NullFormatter())
     legend1 = plt.scatter([0], [0], c=color_list[0],marker='*',label=label_list[0])
     legend2 = plt.scatter([0], [0], c=color_list[1],marker='*',label=label_list[1])
@@ -1019,9 +1033,8 @@ def plot_embedding(data, label, title):
     handles=[legend1,legend2,legend3]
 
     plt.legend(handles=handles,loc = 'best',prop={'family' : 'Times New Roman','size':15})
-    # 设置 x 轴和 y 轴的线条宽度
-    plt.gca().spines['bottom'].set_linewidth(1.5)  # 设置 x 轴线条宽度
-    plt.gca().spines['left'].set_linewidth(1.5)    # 设置 y 轴线条宽度
+    plt.gca().spines['bottom'].set_linewidth(1.5)  
+    plt.gca().spines['left'].set_linewidth(1.5)    
     plt.gca().spines['top'].set_linewidth(1.5)  
     plt.gca().spines['right'].set_linewidth(1.5) 
 
@@ -1029,7 +1042,7 @@ def plot_embedding(data, label, title):
     plt.savefig('./few_shot_tsne.png',dpi=500)
     
 
-
+#Get tSNE plot
 def tSNE():
     train_pubtest_DataFrame=pd.read_json('./data/Kaggle_train.json', lines=True)
 
@@ -1091,7 +1104,7 @@ def tSNE():
     
     
     
-
+#Use different functions according to different purposes
 #train_fold()
 #train_fold_avg()
 tSNE()
