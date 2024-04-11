@@ -31,8 +31,8 @@ ax.set_yticks(yticks)
 plt.yticks(fontproperties='Times New Roman', size=16)
 plt.xticks(fontproperties='Times New Roman', size=16)
 
-plt.gca().spines['bottom'].set_linewidth(1.5)  # 设置 x 轴线条宽度
-plt.gca().spines['left'].set_linewidth(1.5)  # 设置 y 轴线条宽度
+plt.gca().spines['bottom'].set_linewidth(1.5)  
+plt.gca().spines['left'].set_linewidth(1.5) 
 plt.gca().spines['top'].set_linewidth(1.5)
 plt.gca().spines['right'].set_linewidth(1.5)
 
