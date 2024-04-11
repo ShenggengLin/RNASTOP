@@ -1,4 +1,4 @@
-# dna pretrain
+# Import the required libraries
 import os
 import torch
 import torch.nn as nn
@@ -12,13 +12,13 @@ import editdistance
 from torchsummary import summary
 from torchcrf import CRF
 from numpy import random
-
 from arnie.pfunc import pfunc
 from arnie.free_energy import free_energy
 from arnie.bpps import bpps
 from arnie.mfe import mfe
 import arnie.utils as utils
 
+#Fixed random seeds to ensure reproducibility of the results
 seed = 4
 random.seed(seed)
 os.environ['PYTHONHASHSEED'] = str(seed)
@@ -27,6 +27,8 @@ torch.manual_seed(seed)
 torch.cuda.manual_seed(seed)
 torch.cuda.manual_seed_all(seed)
 torch.backends.cudnn.deterministic = True
+
+#The hyperparameters of the model can be modified here
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 learning_rate = 4.0e-4
 Batch_size = 64
@@ -34,19 +36,6 @@ Conv_kernel = 7
 dropout = 0.3
 embedding_dim = 128
 num_encoder_layers = 4
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print("device:", device)
-import fm
-
-# Load RNA-FM model
-fm_pretrain_model, fm_pretrain_alphabet = fm.pretrained.rna_fm_t12()
-fm_pretrain_batch_converter = fm_pretrain_alphabet.get_batch_converter()
-fm_pretrain_model = fm_pretrain_model.to(device)
-
-tokens = 'ACGU().BEHIMSXDF'  # D start,F end
-vocab_size = len(tokens)
-
 patience = 50
 error_alpha = 0.5
 error_beta = 5
@@ -54,8 +43,20 @@ epochs = 1000
 nhead = 4
 nStrDim = 4
 Use_pretrain_model = True
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print("device:", device)
 
+# Load RNA-FM model
+import fm
+fm_pretrain_model, fm_pretrain_alphabet = fm.pretrained.rna_fm_t12()
+fm_pretrain_batch_converter = fm_pretrain_alphabet.get_batch_converter()
+fm_pretrain_model = fm_pretrain_model.to(device)
 
+#Definition the word list
+tokens = 'ACGU().BEHIMSXDF'  # D start,F end
+vocab_size = len(tokens)
+
+# Definition the RNADataset
 class RNADataset(Dataset):
     def __init__(self, seqs, seqsOri, As, train_sam_wei=None, train_error_weights=None, sam_aug_flag=None):
         if Use_pretrain_model:
@@ -80,7 +81,7 @@ class RNADataset(Dataset):
     def __len__(self):
         return self.length
 
-
+#Get the embedding of the mrna sequences
 def preprocess_inputs(np_seq):
     re_seq = []
     for i in range(len(np_seq)):
@@ -90,7 +91,7 @@ def preprocess_inputs(np_seq):
 
     return re_seq
 
-
+#Get the adjacency matrix of the mrna
 def get_structure_adj(data_seq_length, data_structure, data_sequence):
     Ss = []
     for i in (range(len(data_sequence))):
@@ -126,7 +127,7 @@ def get_structure_adj(data_seq_length, data_structure, data_sequence):
 
     return Ss
 
-
+# Define the RNADegpre model
 class Model(nn.Module):
     def __init__(self, vocab_size, embedding_dim, pred_dim, dropout, nhead, num_encoder_layers):
         super().__init__()
@@ -250,7 +251,7 @@ class Model(nn.Module):
 
             return pre_out
 
-
+#get the 1-dimensional and 2-dimensional distance matrix of mRNA
 def get_distance_matrix(As):
     idx = np.arange(As.shape[1])
     Ds = []
@@ -268,8 +269,6 @@ def get_distance_matrix(As):
         Dss.append(Ds ** i)
     Ds = np.stack(Dss, axis=3)
     return Ds
-
-
 def calc_neighbor(d, dim, n):
     lst_x, lst_y = np.where(d == n)
     for c, x in enumerate(lst_x):
@@ -283,8 +282,6 @@ def calc_neighbor(d, dim, n):
         if y - 1 >= 0:
             d[x, y - 1] = min(d[x, y - 1], n + 1)
     return d
-
-
 def get_distance_matrix_2d(Ss):
     Ds = []
     n = Ss.shape[0]
@@ -308,7 +305,7 @@ def get_distance_matrix_2d(Ss):
     Ds = np.stack(Dss, axis=3)
     return Ds[:, :, :, :, 0]
 
-
+#The codons are sorted according to their degradability, and the degradability value and the location of the codon are returned
 def max_deg_pro(pre_list, geshu):
     val = []
     for i in range(len(pre_list) // 3):
@@ -322,14 +319,14 @@ def max_deg_pro(pre_list, geshu):
 
     return vale, sorted_id
 
-
+#Returns the most easily degraded codon
 def max_deg_mimazi(seq, sort_id):
     mimazi = []
     for i in range(len(sort_id)):
         mimazi.append(seq[sort_id[i] * 3] + seq[sort_id[i] * 3 + 1] + seq[sort_id[i] * 3 + 2])
     return mimazi
 
-
+#Define the codon table
 mimazi_table = [{'GCU', 'GCC', 'GCA', 'GCG'}, {'CGU', 'CGC', 'CGA', 'CGG', 'AGA', 'AGG'}, {'AAU', 'AAC'},
                 {'GAU', 'GAC'}, {'UGU', 'UGC'},
                 {'CAA', 'CAG'}, {'GAA', 'GAG'}, {'GGU', 'GGC', 'GGA', 'GGG'}, {'CAU', 'CAC'}, {'AUU', 'AUC', 'AUA'},
@@ -338,7 +335,7 @@ mimazi_table = [{'GCU', 'GCC', 'GCA', 'GCG'}, {'CGU', 'CGC', 'CGA', 'CGG', 'AGA'
                 {'UCU', 'UCC', 'UCA', 'UCG', 'AGU', 'AGC'}, {'ACU', 'ACC', 'ACA', 'ACG'}, {'UGG'}, {'UAU', 'UAC'},
                 {'GUU', 'GUC', 'GUA', 'GUG'}]
 
-
+#Return the mutated sequences
 def seq_opti(seq, sorted_id):
     # sorted_id [91, 81, 145]
 
