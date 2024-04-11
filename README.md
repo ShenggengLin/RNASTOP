@@ -49,7 +49,7 @@ python LLMs_assist_transfer_learning.py
 ```
 In order to verify whether the large language model can assist RNADegpre in transfer learning, you need to first run RNADegpre_train.py to get the parameters of the RNADegpre model, then run RNADegper_withoutpretrain_train.py to get the parameters of the RNADegpre model without the large language model, and finally run LLMs_assist_transfer_learning.py to obtain the experimental results in the paper. The output of LLMs_assist_transfer_learning.py is the sequence similarity values and the MCRMSE values of the model in three different cases, as well as the t-SNE plot of the sequences distribution.
 
-## RNADegpre is capable of capturing sequence, structure patterns and important features affecting mRNA degradation
+## RNADegpre is capable of capturing sequence and structure patterns affecting mRNA degradation
 
 Obtain the results of Figure 4a-g
 ```
@@ -67,6 +67,14 @@ python vision_motif_3u.py
 python vision_loop_motif.py
 ```
 The outputs of vision_motif_3u.py and vision_loop_motif.py are normalized degradation coefficients at different positions in the mRNA sequence.
+
+## RNADegpre is capable of capturing important features affecting mRNA degradation
+```
+cd ./RNADegpre/scripts
+conda activate RNADegpre_env
+python RNADegpre_train_without***.py
+```
+Just modify the definition of RNADegpre in RNADegpre_train.py. Verify the importance of different features by removing different modules.
 ## RNA-seq Optimization
 ```
 #beam search
