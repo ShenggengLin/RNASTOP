@@ -1,7 +1,7 @@
-# RNADegpre
+# RNADegPO
 
-This repository contains codes, data and trained models for RNADegpre. RNADegpre is a deep learning model based on large language models and the dual-branch feature decoupling-and-aggregating network to predict mRNA degradation at both the nucleotide resolution and full-length levels.You can find more details about RNADegpre in our paper, "Prediction of mRNA degradation and codon optimization to enhance mRNA stability via deep learning" (Lin et al., 2024).
-![image](https://github.com/ShenggengLin/RNADegpre/blob/main/pictures/model-optimization2.tif)
+This repository contains codes, data and trained models for RNADegPO. RNADegPO is a a novel framework that accurately predicts mRNA degradation at both the single-nucleotide and full-length levels, while also enhancing mRNA stability through codon optimization. RNADegPO integrates a deep learning model based on nucleic acid large language models (LLM) and a dual-branch feature decoupling-and-aggregating network for the prediction of mRNA degradation, and employs beam search for codon optimization to improve mRNA stability. You can find more details about RNADegpre in our paper, "RNADegPO: Prediction and optimization of mRNA stability via deep learning and heuristic search algorithm" (Lin et al., 2024).
+![image](https://github.com/ShenggengLin/RNADegPO/blob/main/pictures/model-optimization2.tif)
 ## Create Environment with Conda
 
 First, download the repository and create the environment.
