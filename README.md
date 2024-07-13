@@ -24,36 +24,36 @@ Download the DNABERT model weights from https://drive.google.com/drive/folders/1
 In the RNADegPO model, it is necessary to predict the secondary structure of mRNA based on its sequence. In the process of mRNA sequence optimization, it is also necessary to calculate the minimum free energy of mRNA. Both processes require the use of the arnie library. arnie library is a python API to compute RNA energetics and do structure prediction across multiple secondary structure packages. please download the arnie library from https://github.com/DasLab/arnie and configure it according to the instructions. Then place the arnie library under the scripts directory, just like the current code directory.
 ## Model train and test on the OpenVaccine Kaggle competition dataset
 ```
-cd ./RNADegpre/scripts
+cd ./RNADegPO/scripts
 conda activate RNADegpre_env
-python RNADegpre_train.py
+python RNADegPO_train.py
 ```
-The input to RNADegpre_train.py is the OpenVaccine Kaggle competition dataset. RNADegpre_train.py will output the train process and MCRMSE of the training set and test set. The best model parameters will be saved. In the code file, you can modify the model's hyperparameters and training data. And there are detailed comments for each function in the code file.
+The input to RNADegPO_train.py is the OpenVaccine Kaggle competition dataset. RNADegPO_train.py will output the train process and MCRMSE of the training set and test set. The best model parameters will be saved. In the code file, you can modify the model's hyperparameters and training data. And there are detailed comments for each function in the code file.
 
 ## Model test on the dataset of full-length mRNAs
 ```
-cd ./RNADegpre/scripts
+cd ./RNADegPO/scripts
 conda activate RNADegpre_env
 python mRNA_deg_spe_cor_dataproce.py
 python mRNA_deg_spe_cor.py
 ```
 In order to test the performance of the RNADegpre model on the dataset of full-length mRNAs, you need to first use mRNA_deg_spe_cor_dataproce.py to preprocess the dataset of full-length mRNAs, and get the GSE173083_188_withstrloop.csv file, and then use the GSE173083_188_withstrloop.csv file as the input of mRNA_deg_spe_cor.py to test the model performance. The output of mRNA_deg_spe_cor.py is the correlation coefficient between the predicted value predicted by the model and the experimental value.
 
-## Large language models assist RNADegpre in transfer learning
+## Large language models assist RNADegPO in transfer learning
 ```
-cd ./RNADegpre/scripts
+cd ./RNADegPO/scripts
 conda activate RNADegpre_env
-python RNADegpre_train.py
-python RNADegper_withoutpretrain_train.py
+python RNADegPO_train.py
+python RNADegPO_withoutpretrain_train.py
 python LLMs_assist_transfer_learning.py
 ```
-In order to verify whether the large language model can assist RNADegpre in transfer learning, you need to first run RNADegpre_train.py to get the parameters of the RNADegpre model, then run RNADegper_withoutpretrain_train.py to get the parameters of the RNADegpre model without the large language model, and finally run LLMs_assist_transfer_learning.py to obtain the experimental results in the paper. The output of LLMs_assist_transfer_learning.py is the sequence similarity values and the MCRMSE values of the model in three different cases, as well as the t-SNE plot of the sequences distribution.
+In order to verify whether the large language model can assist RNADegPO in transfer learning, you need to first run RNADegPO_train.py to get the parameters of the RNADegPO model, then run RNADegPO_withoutpretrain_train.py to get the parameters of the RNADegPO model without the large language model, and finally run LLMs_assist_transfer_learning.py to obtain the experimental results in the paper. The output of LLMs_assist_transfer_learning.py is the sequence similarity values and the MCRMSE values of the model in three different cases, as well as the t-SNE plot of the sequences distribution.
 
-## RNADegpre is capable of capturing sequence and structure patterns affecting mRNA degradation
+## RNADegPO is capable of capturing sequence and structure patterns affecting mRNA degradation
 
 Obtain the results of Figure 4a-g
 ```
-cd ./RNADegpre/scripts
+cd ./RNADegPO/scripts
 conda activate RNADegpre_env
 python best_mse_analysis.py
 ```
@@ -61,29 +61,29 @@ The input to best_mse_analysis.py is the test database of the OpenVaccine Kaggle
 
 Obtain the results of Figure 4h-i
 ```
-cd ./RNADegpre/scripts
+cd ./RNADegPO/scripts
 conda activate RNADegpre_env
 python vision_motif_3u.py
 python vision_loop_motif.py
 ```
 The outputs of vision_motif_3u.py and vision_loop_motif.py are normalized degradation coefficients at different positions in the mRNA sequence.
 
-## RNADegpre is capable of capturing important features affecting mRNA degradation
+## RNADegPO is capable of capturing important features affecting mRNA degradation
 ```
-cd ./RNADegpre/scripts
+cd ./RNADegPO/scripts
 conda activate RNADegpre_env
-python RNADegpre_train_without***.py
+python RNADegPO_train_without***.py
 ```
-Just modify the definition of RNADegpre in RNADegpre_train.py. Verify the importance of different features by removing different modules.
+Just modify the definition of RNADegPO in RNADegpre_train.py. Verify the importance of different features by removing different modules.
 ## RNA-seq Optimization
 ```
 #beam search
-cd ./RNADegpre/scripts
+cd ./RNADegPO/scripts
 conda activate RNADegpre_env
 python beam_rnaopt_covid19.py
 
 #MCTS
-cd ./RNADegpre/scripts
+cd ./RNADegPO/scripts
 conda activate RNADegpre_env
 python MCTS_rnaopt_covid19.py
 ```
